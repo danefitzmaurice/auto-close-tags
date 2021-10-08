@@ -1,0 +1,28 @@
+{
+  "name": "auto-close-tags",
+  "version": "0.0.1",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/atom": "^1.40.11",
+    "@types/lodash": "^4.14.173",
+    "atom-ts-transpiler": "^1.5.3",
+    "module-alias": "^2.2.2",
+    "ts-node": "^10.2.1",
+    "typescript": "^4.4.3"
+  },
+  "atomTranspilers": [
+    {
+      "transpiler": "atom-ts-transpiler",
+      "glob": "{!(node_modules)/**/,}*.ts?(x)",
+      "options": {
+        "compilerOptions": {
+          "target": "es2020",
+          "module": "commonjs"
+        },
+        "cacheKeyFiles": [],
+        "verbose": false
+      }
+    }
+  ]
+}
