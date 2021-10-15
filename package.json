@@ -1,11 +1,14 @@
 {
   "name": "auto-close-tags",
-  "version": "0.0.1",
   "main": "index.js",
+  "version": "0.0.1",
+  "description": "Automatically close tags while working in markup.",
+  "repository": "https://github.com/danefitzmaurice/auto-close-tags",
   "license": "MIT",
   "devDependencies": {
     "@types/atom": "^1.40.11",
     "@types/lodash": "^4.14.173",
+    "@types/node": "^16.10.3",
     "atom-ts-transpiler": "^1.5.3",
     "module-alias": "^2.2.2",
     "ts-node": "^10.2.1",

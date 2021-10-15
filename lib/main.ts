@@ -9,6 +9,9 @@ import {
 import { config, AutoCloseTagsConfig } from './config';
 
 /** ... */
+const ATTR_NEW_LINE_REG = /^.*\<([a-zA-Z-SÍ_]+)[^>]*\n\s*[^>]*$/;
+
+/** ... */
 interface TextInsertedEvent {
   text: string;
   range: Range;
@@ -404,29 +407,28 @@ class AutoCloseTags {
     const { scopeName } = this.currentEditor.getGrammar();
 
     // ...
-    let startScopes = this.getSyntaxTreeAtPoint(range.start);
-    let endScopes = this.getSyntaxTreeAtPoint(range.end);
+    const scopes = this.getSyntaxTreeAtPoint(range.start);
 
     // console.log('scopes:', { startScopes, endScopes });
 
     // ...
     if (scopeName === 'source.jsx' || scopeName === 'source.tsx') {
-      startScopes = getLocalJsxElementSyntaxTree(startScopes);
-      endScopes = getLocalJsxElementSyntaxTree(endScopes);
+      for (const scope of [...scopes].reverse()) {
+        if (/jsx_closing_element|jsx_self_closing_element/.test(scope)) {
+          return false;
+        }
 
-      // console.log({ startScopes, endScopes });
+        if (/jsx_opening_element/.test(scope)) {
+          return true;
+        }
+      }
 
-      // Must be within a "jsx_element" scope.
-      if (!startScopes.includes('jsx_element')) return false;
-      // Must not be ...
-      if (startScopes.includes('jsx_text')) return false;
-
-      return true;
+      return false;
     }
 
     // ...
     if (scopeName === 'text.html.vue') {
-      return startScopes.includes('meta.tag.block.any.html');
+      return scopes.includes('meta.tag.block.any.html');
     }
 
     return true;
@@ -442,14 +444,22 @@ class AutoCloseTags {
       throw new Error('');
     }
 
-    const start = range.start;
-    const end = range.end;
+    // ...
+    const { start, end } = range;
+    // ...
     const buffer = this.currentBuffer;
+    // ...
     const lineBefore = buffer.getLines()[start.row];
     const lineAfter = buffer.getLines()[end.row];
+
+    // ...
     const content =
       lineBefore.substr(lineBefore.lastIndexOf('<')) + '\n' + lineAfter;
+
+    // ...
     const regex = /^.*\<([a-zA-Z-_]+)(\s.+)?\>\n\s*\<\/\1\>.*/;
+
+    // ...
     const indentStr = this.getIndentStr();
 
     if (regex.test(content)) {
@@ -459,9 +469,7 @@ class AutoCloseTags {
       return;
     }
 
-    const attrNewLineReg = /^.*\<([a-zA-Z-SÍ_]+)[^>]*\n\s*[^>]*$/;
-
-    if (attrNewLineReg.test(content)) {
+    if (ATTR_NEW_LINE_REG.test(content)) {
       this.currentEditor.insertText(indentStr);
     }
   }
@@ -481,6 +489,7 @@ class AutoCloseTags {
 
     // ...
     if (!this.isBufferWithinMarkup(range)) return;
+    // ...
 
     if (text === '\n') {
       return this.addIndent(event.range);
@@ -617,12 +626,20 @@ function isOpenedCondition(str: string) {
  */
 function createSettingsConfig() {
   // ...
+  const [lastType, ...types] = [...config.enabledFileTypes].reverse();
+  // ...
+  const defaultTypesText =
+    types
+      .reverse()
+      .map(type => `\`${type}\``)
+      .join(', ') + ` and \`${lastType}\``;
+
+  // ...
   return {
     enabledFileTypes: {
       type: 'array',
       default: config.enabledFileTypes,
-      description:
-        'Enable autoclose in these file types, default file type is `html`. (comma split)'
+      description: `Enable autoclose in these file types, default file types are ${defaultTypesText}. (comma split)`
     },
     selfCloseTags: {
       type: 'array',
@@ -674,19 +691,6 @@ function setConfigValue(key: keyof AutoCloseTagsConfig, value: unknown) {
   }
 
   config[key] = value as any;
-}
-
-/**
- * ...
- *
- * @param scopes ...
- * @return ...
- */
-function getLocalJsxElementSyntaxTree(scopes: string[]) {
-  // ...
-  const i = scopes.lastIndexOf('jsx_element');
-
-  return i === -1 ? [] : scopes.slice(i);
 }
 
 // endregion Helper Functions
