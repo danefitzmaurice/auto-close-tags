@@ -3,7 +3,7 @@ import {
   Disposable,
   TextEditor,
   Range,
-  Point
+  Point,
 } from 'atom';
 
 import { config, AutoCloseTagsConfig } from './config';
@@ -22,10 +22,11 @@ interface TextInsertedEvent {
  */
 class AutoCloseTags {
   subscriptions: CompositeDisposable | null = null;
-  currentEditor: TextEditor | null = null;
   action: Disposable | null = null;
   extension: string | null = null;
   config = createSettingsConfig();
+
+  #currentEditor: TextEditor | null = null;
 
   /**
    * ...
@@ -44,12 +45,42 @@ class AutoCloseTags {
   /**
    * ...
    */
-  get currentBuffer() {
-    if (!this.currentEditor) {
+  get autocloseDisabled() {
+    return this.extension && !config.enabledFileTypes.includes(this.extension);
+  }
+
+  /**
+   * ...
+   */
+  get currentEditor() {
+    if (!this.#currentEditor) {
       throw new Error('');
     }
 
+    return this.#currentEditor;
+  }
+
+  /**
+   * ...
+   */
+  get currentBuffer() {
     return this.currentEditor.getBuffer();
+  }
+
+  /**
+   * `true` if the current editor's scope is JSX/TSX.
+   */
+  get isJsx() {
+    return /^source\.(jsx|tsx)$/.test(
+      this.currentEditor.getGrammar().scopeName
+    );
+  }
+
+  /**
+   * `true` if the current editor's scope is Vue.
+   */
+  get isVue() {
+    return /^text\.html\.vue$/.test(this.currentEditor.getGrammar().scopeName);
   }
 
   /**
@@ -65,7 +96,7 @@ class AutoCloseTags {
     for (const key of configKeys) {
       const keyPath = `${packageName}.${key}`;
 
-      atom.config.observe(keyPath, val => setConfigValue(key, val));
+      atom.config.observe(keyPath, (val) => setConfigValue(key, val));
     }
   }
 
@@ -80,19 +111,22 @@ class AutoCloseTags {
       'selfCloseTags',
       'addSlashToSelfCloseTag',
       'slashTriggerAutoClose',
-      'insertWhitespaceOnClose'
+      'insertWhitespaceOnClose',
     ]);
 
+    // ...
+    this.#currentEditor = atom.workspace.getActiveTextEditor() ?? null;
+
+    // ...
     this.getFileExtension();
-    this.currentEditor = atom.workspace.getActiveTextEditor() ?? null;
 
     if (this.currentEditor) {
-      this.action = this.currentEditor.onDidInsertText(event => {
-        this.closeTag(event);
-      });
+      this.action = this.currentEditor.onDidInsertText((event) =>
+        this.closeTag(event)
+      );
     }
 
-    atom.workspace.onDidChangeActivePaneItem(paneItem => {
+    atom.workspace.onDidChangeActivePaneItem((paneItem) => {
       this.paneItemChanged(paneItem);
     });
   }
@@ -101,13 +135,9 @@ class AutoCloseTags {
    * ...
    */
   deactivate() {
-    if (this.action) {
-      this.action.disposalAction?.();
-    }
+    if (this.action) this.action.disposalAction?.();
 
-    if (this.subscriptions) {
-      this.subscriptions.dispose();
-    }
+    if (this.subscriptions) this.subscriptions.dispose();
   }
 
   /**
@@ -118,10 +148,6 @@ class AutoCloseTags {
    * @return ...
    */
   getTextBefore(text: string, row: number) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
-
     let multiRow = false;
 
     while (!this.hasOddLeftBrackets(text) && row > 0) {
@@ -146,13 +172,6 @@ class AutoCloseTags {
   /**
    * ...
    */
-  autocloseDisabled() {
-    return this.extension && !config.enabledFileTypes.includes(this.extension);
-  }
-
-  /**
-   * ...
-   */
   getTagName(str: string) {
     if (!str.includes('<')) return null;
 
@@ -168,10 +187,6 @@ class AutoCloseTags {
    * @param indentSize The indent size of the tag beginning part.
    */
   dealSlash(range: Range, strBefore: string, indentSize: number) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
-
     const line = this.currentBuffer.getLines()[range.end.row];
     this.backspaceIfNeeded(range, strBefore, indentSize);
 
@@ -196,10 +211,6 @@ class AutoCloseTags {
     indentSize: number,
     tagName: string
   ) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
-
     const tempBefore = trimRight(strBefore);
 
     if (tempBefore[tempBefore.length - 1] === '/') return;
@@ -224,20 +235,13 @@ class AutoCloseTags {
    * @return ...
    */
   dealExclamationMark(range: Range, strBefore: string) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
+    if (range.end.row === 0) return; // <!DOCTYPE html>
 
-    if (range.end.row === 0) {
-      return;
-      // <!DOCTYPE html>
-    }
+    if (!/<$/.test(strBefore)) return;
 
-    if (/<$/.test(strBefore)) {
-      this.currentEditor.insertText(`--  -->`);
-      const rightPartLen = ' -->'.length;
-      this.currentEditor.moveLeft(rightPartLen);
-    }
+    this.currentEditor.insertText(`--  -->`);
+    const rightPartLen = ' -->'.length;
+    this.currentEditor.moveLeft(rightPartLen);
   }
 
   /**
@@ -262,10 +266,6 @@ class AutoCloseTags {
    * @return ...
    */
   backIndent(range: Range, indentSize: number) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
-
     if (!indentSize) return;
 
     // ...
@@ -299,10 +299,6 @@ class AutoCloseTags {
    * @return ...
    */
   closeSelfTag(strBefore: string) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
-
     // ...
     const closePart = config.addSlashToSelfCloseTag ? '/>' : '>';
 
@@ -359,14 +355,13 @@ class AutoCloseTags {
   private paneItemChanged(paneItem: unknown) {
     if (!paneItem) return;
 
-    if (this.action) {
-      this.action.disposalAction?.();
-    }
+    if (this.action) this.action.disposalAction?.();
 
-    this.currentEditor = paneItem as TextEditor;
+    this.#currentEditor = paneItem as TextEditor;
     this.getFileExtension();
 
-    if (this.autocloseDisabled()) return;
+    // ...
+    if (this.autocloseDisabled) return;
 
     if (this.currentEditor.onDidInsertText) {
       this.action = this.currentEditor.onDidInsertText(this.closeTag);
@@ -380,10 +375,6 @@ class AutoCloseTags {
    * @return ...
    */
   private getSyntaxTreeAtPoint(point: Point) {
-    if (!this.currentEditor) {
-      throw new Error('[AutoCloseTags] ...');
-    }
-
     // ...
     const scopes = this.currentEditor
       .syntaxTreeScopeDescriptorForBufferPosition(point)
@@ -400,19 +391,11 @@ class AutoCloseTags {
    * @return `true` if the range is within markup, otherwise `false`.
    */
   private isBufferWithinMarkup(range: Range) {
-    if (!this.currentEditor) {
-      throw new Error('[AutoCloseTags] ...');
-    }
-
-    const { scopeName } = this.currentEditor.getGrammar();
-
     // ...
     const scopes = this.getSyntaxTreeAtPoint(range.start);
 
-    // console.log('scopes:', { startScopes, endScopes });
-
     // ...
-    if (scopeName === 'source.jsx' || scopeName === 'source.tsx') {
+    if (this.isJsx) {
       for (const scope of [...scopes].reverse()) {
         if (/jsx_closing_element|jsx_self_closing_element/.test(scope)) {
           return false;
@@ -427,7 +410,7 @@ class AutoCloseTags {
     }
 
     // ...
-    if (scopeName === 'text.html.vue') {
+    if (this.isVue) {
       return scopes.includes('meta.tag.block.any.html');
     }
 
@@ -440,17 +423,9 @@ class AutoCloseTags {
    * @param range ...
    */
   private addIndent(range: Range) {
-    if (!this.currentEditor) {
-      throw new Error('');
-    }
-
     // ...
-    const { start, end } = range;
-    // ...
-    const buffer = this.currentBuffer;
-    // ...
-    const lineBefore = buffer.getLines()[start.row];
-    const lineAfter = buffer.getLines()[end.row];
+    const lineBefore = this.currentBuffer.getLines()[range.start.row];
+    const lineAfter = this.currentBuffer.getLines()[range.end.row];
 
     // ...
     const content =
@@ -478,10 +453,6 @@ class AutoCloseTags {
    * ...
    */
   private closeTag = (event: unknown) => {
-    if (!this.currentEditor) {
-      throw new Error('[AutoCloseTags] ...');
-    }
-
     // ...
     if (!isTextInsertedEvent(event)) return;
 
@@ -490,11 +461,8 @@ class AutoCloseTags {
     // ...
     if (!this.isBufferWithinMarkup(range)) return;
     // ...
-
-    if (text === '\n') {
-      return this.addIndent(event.range);
-    }
-
+    if (text === '\n') return this.addIndent(event.range);
+    // ...
     if (!['>', '/', '!'].includes(text)) return;
 
     const line = this.currentBuffer.getLines()[range.end.row];
@@ -507,13 +475,18 @@ class AutoCloseTags {
       ? 0
       : (strBefore.match(/^\s*/) ?? [])[0].length;
 
-    const tagName = this.getTagName(strBefore);
+    const tagName = this.getTagName(strBefore) ?? '';
 
     if (text === '!') {
       return this.dealExclamationMark(range, strBefore);
     }
 
-    if (!tagName || isOpenedCondition(strBefore)) return;
+    if (
+      (!tagName && (!this.isJsx || !isJsxFragment(strBefore))) ||
+      isOpenedCondition(strBefore)
+    ) {
+      return;
+    }
 
     if (text === '>') {
       return this.dealRightAngleBracket(range, strBefore, indentSize, tagName);
@@ -589,7 +562,7 @@ function isSelfcloseTag(str: string) {
 
   if (!tagName || !tagName.toLowerCase()) return;
 
-  return config.selfCloseTags.some(tag => tag.toLowerCase() === tagName);
+  return config.selfCloseTags.some((tag) => tag.toLowerCase() === tagName);
 }
 
 /**
@@ -622,6 +595,16 @@ function isOpenedCondition(str: string) {
 /**
  * ...
  *
+ * @param str ...
+ * @return ...
+ */
+function isJsxFragment(str: string) {
+  return /<$/.test(str);
+}
+
+/**
+ * ...
+ *
  * @return ...
  */
 function createSettingsConfig() {
@@ -631,7 +614,7 @@ function createSettingsConfig() {
   const defaultTypesText =
     types
       .reverse()
-      .map(type => `\`${type}\``)
+      .map((type) => `\`${type}\``)
       .join(', ') + ` and \`${lastType}\``;
 
   // ...
@@ -639,29 +622,29 @@ function createSettingsConfig() {
     enabledFileTypes: {
       type: 'array',
       default: config.enabledFileTypes,
-      description: `Enable autoclose in these file types, default file types are ${defaultTypesText}. (comma split)`
+      description: `Enable autoclose in these file types, default file types are ${defaultTypesText}. (comma split)`,
     },
     selfCloseTags: {
       type: 'array',
       default: config.selfCloseTags,
       description:
-        'Self-close tags, will not add the right part when type `>`. (comma split)'
+        'Self-close tags, will not add the right part when type `>`. (comma split)',
     },
     slashTriggerAutoClose: {
       type: 'boolean',
       default: config.slashTriggerAutoClose,
-      description: 'Trigger auto close when type a `/`'
+      description: 'Trigger auto close when type a `/`',
     },
     addSlashToSelfCloseTag: {
       type: 'boolean',
       default: config.addSlashToSelfCloseTag,
-      description: 'Automatically add a `/` when close the self-close tag'
+      description: 'Automatically add a `/` when close the self-close tag',
     },
     insertWhitespaceOnClose: {
       type: 'boolean',
       default: config.insertWhitespaceOnClose,
-      description: 'Add a whitespace before `>` when close the self-close tag'
-    }
+      description: 'Add a whitespace before `>` when close the self-close tag',
+    },
   };
 }
 
