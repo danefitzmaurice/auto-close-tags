@@ -120,10 +120,8 @@ class AutoCloseTags {
     // ...
     this.getFileExtension();
 
-    if (this.currentEditor) {
-      this.action = this.currentEditor.onDidInsertText((event) =>
-        this.closeTag(event)
-      );
+    if (this.#currentEditor) {
+      this.action = this.#currentEditor.onDidInsertText(this.closeTag);
     }
 
     atom.workspace.onDidChangeActivePaneItem((paneItem) => {
