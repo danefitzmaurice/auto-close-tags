@@ -54,7 +54,7 @@ class AutoCloseTags {
    */
   get currentEditor() {
     if (!this.#currentEditor) {
-      throw new Error('');
+      throw new Error('[AutoCloseTags] `currentEditor` not set.');
     }
 
     return this.#currentEditor;
@@ -336,7 +336,7 @@ class AutoCloseTags {
    */
   private getFileExtension() {
     // ...
-    let filename = !this.currentEditor ? null : this.currentEditor.getTitle();
+    let filename = this.#currentEditor?.getTitle() ?? null;
 
     this.extension = null;
 
@@ -411,7 +411,15 @@ class AutoCloseTags {
 
     // ...
     if (this.isVue) {
-      return scopes.includes('meta.tag.block.any.html');
+      // return scopes.includes('punctuation.definition.tag.end.html');
+
+      for (const scope of [...scopes].reverse()) {
+        if (/meta.tag.block.any.html/.test(scope)) return true;
+        if (/meta.tag.other.html/.test(scope)) return true;
+        if (/punctuation.definition.tag.end.html/.test(scope)) return true;
+      }
+
+      return false;
     }
 
     return true;
